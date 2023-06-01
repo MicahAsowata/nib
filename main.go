@@ -26,7 +26,7 @@ func main() {
 	}
 	routes(repo)
 	log.Println("Work done start")
-	err := app.Listen("0.0.0.0:3000")
+	err := app.Listen("0.0.0.0:3030")
 	if err != nil {
 		log.Panic(err)
 	}
