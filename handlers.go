@@ -5,9 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
+	"github.com/MicahAsowata/nib/auth"
+	"github.com/MicahAsowata/nib/config"
 	"github.com/MicahAsowata/nib/models"
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/pocketbase/dbx"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -101,23 +105,24 @@ func (r *Repo) CreateUser(c *fiber.Ctx) error {
 func (r *Repo) LoginUser(c *fiber.Ctx) error {
 	c.Accepts("application/json")
 	// Get Name and Email
-	cred := models.LoginCredentials{}
-	err := c.BodyParser(&cred)
+	req := auth.SignInRequest{}
+	err := c.BodyParser(&req)
 	if err != nil {
 		log.Println(err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "invalid data 11",
 		})
 	}
-	type ValidUser struct {
+	type User struct {
+		ID       int
 		Name     string
 		Email    string
 		Password []byte
 	}
 
-	user := ValidUser{}
+	user := User{}
 	// Check if the email is correct
-	err = r.db.Select("name", "email", "password").From("users").Where(dbx.HashExp{"email": cred.Email}).One(&user)
+	err = r.db.Select("id", "name", "email", "password").From("users").Where(dbx.HashExp{"email": req.Email}).One(&user)
 	if err != nil {
 		log.Println(err)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -130,7 +135,7 @@ func (r *Repo) LoginUser(c *fiber.Ctx) error {
 		})
 	}
 	// Check if the password is correct
-	err = bcrypt.CompareHashAndPassword(user.Password, []byte(cred.Password))
+	err = bcrypt.CompareHashAndPassword(user.Password, []byte(req.Password))
 	if err != nil {
 		log.Println(err)
 		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
@@ -142,8 +147,35 @@ func (r *Repo) LoginUser(c *fiber.Ctx) error {
 			"error": "something is wrong with those credentials 15",
 		})
 	}
+
+	day := time.Hour * 24
+
+	claims := jwt.MapClaims{
+		"id":    user.ID,
+		"email": user.Email,
+		"name":  user.Name,
+		"exp":   day,
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	t, err := token.SignedString([]byte(config.Secret))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error() + "16",
+		})
+	}
 	// Give the user the desired response
-	return c.Status(fiber.StatusFound).JSON(fiber.Map{
-		"success": fmt.Sprintf("Welcome %s 🎉🎉", user.Name),
+	return c.Status(fiber.StatusFound).JSON(auth.SignInResponse{
+		Token: t,
+	})
+}
+
+func (r *Repo) Protected(c *fiber.Ctx) error {
+	user := c.Locals("user").(*jwt.Token)
+	claims := user.Claims.(jwt.MapClaims)
+	name := claims["name"].(string)
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": fmt.Sprintf("Welcome %s 🔥🔥🔥🔥", name),
 	})
 }

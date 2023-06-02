@@ -2,9 +2,11 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/pocketbase/dbx"
 )
@@ -15,10 +17,11 @@ type Repo struct {
 }
 
 func main() {
+	_ = godotenv.Load()
 	app := fiber.New()
 	app.Use(logger.New())
-	urlExample := "postgres://tsc:tsc-pswd@localhost:5432/tsc"
-	db, _ := dbx.Open("postgres", urlExample)
+	dsn := os.Getenv("DSN")
+	db, _ := dbx.Open("postgres", dsn)
 
 	repo := &Repo{
 		app: app,
@@ -26,7 +29,7 @@ func main() {
 	}
 	routes(repo)
 	log.Println("Work done start")
-	err := app.Listen("0.0.0.0:3030")
+	err := app.Listen(":3030")
 	if err != nil {
 		log.Panic(err)
 	}
