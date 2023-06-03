@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"log"
 	"time"
 
@@ -17,8 +16,11 @@ import (
 )
 
 func (r *Repo) Index(c *fiber.Ctx) error {
+	user := c.Locals("user").(*jwt.Token)
+	claims := user.Claims.(jwt.MapClaims)
+	id := claims["id"].(string)
 	books := &[]models.Book{}
-	err := r.db.Select("id", "title").From("book").All(books)
+	err := r.db.Select("id", "title", "summary").From("books").Where(dbx.HashExp{"user_id": id}).All(books)
 	if err != nil {
 		log.Println(err.Error())
 		if errors.Is(err, sql.ErrNoRows) {
@@ -39,6 +41,9 @@ func (r *Repo) Index(c *fiber.Ctx) error {
 }
 
 func (r *Repo) Create(c *fiber.Ctx) error {
+	user := c.Locals("user").(*jwt.Token)
+	claims := user.Claims.(jwt.MapClaims)
+	id := claims["id"].(string)
 	c.Accepts("application/json")
 	book := models.Book{}
 	err := c.BodyParser(&book)
@@ -50,8 +55,10 @@ func (r *Repo) Create(c *fiber.Ctx) error {
 		return nil
 	}
 
-	_, err = r.db.Insert("book", dbx.Params{
-		"title": book.Title,
+	_, err = r.db.Insert("books", dbx.Params{
+		"title":   book.Title,
+		"summary": book.Summary,
+		"user_id": id,
 	}).Execute()
 	if err != nil {
 		log.Println(err.Error())
@@ -114,7 +121,7 @@ func (r *Repo) LoginUser(c *fiber.Ctx) error {
 		})
 	}
 	type User struct {
-		ID       int
+		ID       string
 		Name     string
 		Email    string
 		Password []byte
@@ -168,14 +175,5 @@ func (r *Repo) LoginUser(c *fiber.Ctx) error {
 	// Give the user the desired response
 	return c.Status(fiber.StatusFound).JSON(auth.SignInResponse{
 		Token: t,
-	})
-}
-
-func (r *Repo) Protected(c *fiber.Ctx) error {
-	user := c.Locals("user").(*jwt.Token)
-	claims := user.Claims.(jwt.MapClaims)
-	name := claims["name"].(string)
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"success": fmt.Sprintf("Welcome %s 🔥🔥🔥🔥", name),
 	})
 }
